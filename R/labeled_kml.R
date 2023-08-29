@@ -1,5 +1,3 @@
-`%>%` <- dplyr::`%>%`
-
 #' Labeled KML Polygons
 #'
 #' Creates a kml file with labels visible at centroids
@@ -36,9 +34,9 @@
 #'       -105.0048 41.96413, -105.0338 41.96413
 #'     )))"
 #'   )
-#' ) %>%
-#'   st_as_sf(wkt = "wkt", crs = 4326) %>%
-#'   mutate(label = paste("Unit", Name)) %>%
+#' ) |>
+#'   st_as_sf(wkt = "wkt", crs = 4326) |>
+#'   mutate(label = paste("Unit", Name)) |>
 #'   labeled_kml(label, "Demo", tf)
 #'
 labeled_kml <- function(sf, labels, folder, out_file) {
@@ -48,16 +46,16 @@ labeled_kml <- function(sf, labels, folder, out_file) {
   labels <- rlang::enquo(labels)
 
   # write temporary kml files (gross)
-  x <- sf %>%
-    dplyr::transmute(name = !!labels) %>%
+  x <- sf |>
+    dplyr::transmute(name = !!labels) |>
     sf::st_transform(4326)
 
-  x %>%
+  x |>
     sf::st_write(tf, quiet = TRUE)
 
-  x %>%
-    sf::st_centroid() %>%
-    suppressWarnings() %>%
+  x |>
+    sf::st_centroid() |>
+    suppressWarnings() |>
     sf::st_write(tfc, quiet = TRUE)
 
   # read geometries back in
