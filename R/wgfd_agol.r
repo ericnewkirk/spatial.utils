@@ -3,7 +3,8 @@
 #' Download WGFD data from ArcGIS Online
 #'
 #' @param layer_name Name of the layer to download
-#' @param crs coordinate reference system for sf object returned
+#' @param crs The coordinate reference system for the output \code{sf} object,
+#'   see \code{\link[sf]{st_crs}}
 #'
 #' @return \code{sf} object
 #' @export

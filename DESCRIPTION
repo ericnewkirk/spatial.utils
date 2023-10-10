@@ -11,8 +11,11 @@ LazyData: true
 Imports:
   dplyr,
   httr,
+  purrr,
   rlang,
-  sf
+  sf,
+  shiny,
+  stringr
 Suggests:
   tibble
 RoxygenNote: 7.2.3

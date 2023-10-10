@@ -9,7 +9,8 @@ wgfd_agol_data(layer_name, crs = 4326)
 \arguments{
 \item{layer_name}{Name of the layer to download}
 
-\item{crs}{coordinate reference system for sf object returned}
+\item{crs}{The coordinate reference system for the output \code{sf} object,
+see \code{\link[sf]{st_crs}}}
 }
 \value{
 \code{sf} object
