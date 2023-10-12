@@ -64,7 +64,7 @@
 #' ha_angled_transects |>
 #'   sf::st_geometry() |>
 #'   plot()
-#' 
+#'
 #' }
 #'
 generate_transects <- function(
@@ -146,7 +146,7 @@ generate_transects <- function(
     dplyr::select(-length)
 
   # return transects with spacing in attributes
-  attr(tr, "spacing_km") <- opt_sp$spacing
+  attr(tr, "spacing_km") <- opt_sp$spacing / 1000
 
   tr
 
