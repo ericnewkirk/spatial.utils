@@ -134,7 +134,8 @@ generate_transects <- function(
 
   tr <- tr |>
     sf::st_set_agr("constant") |>
-    sf::st_join(jn) |>
+    sf::st_join(jn, largest = TRUE) |>
+    suppressWarnings() |>
     dplyr::group_by(.data$polygon_id) |>
     dplyr::mutate(transect_number = dplyr::row_number()) |>
     dplyr::ungroup() |>
