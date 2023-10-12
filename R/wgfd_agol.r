@@ -35,6 +35,6 @@ wgfd_agol_data <- function(layer_name, crs = 4326) {
   )
 
   # create sf object directly from url
-  sf::st_read(httr::build_url(dl_url))
+  sf::read_sf(httr::build_url(dl_url))
 
 }

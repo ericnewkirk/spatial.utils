@@ -15,7 +15,9 @@ Imports:
   rlang,
   sf,
   shiny,
-  stringr
+  stats,
+  stringr,
+  units
 Suggests:
   tibble
 RoxygenNote: 7.2.3

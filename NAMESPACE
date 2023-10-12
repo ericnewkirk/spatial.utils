@@ -2,7 +2,9 @@
 
 export(condense_spatial_files)
 export(count_spatial_files)
+export(generate_transects)
 export(labeled_kml)
+export(rotate_geometry)
 export(spatialFileInput)
 export(spatialFileInputHandler)
 export(wgfd_agol_data)
