@@ -67,16 +67,14 @@
 #'
 #' }
 #'
-generate_transects <- function(
-  sampling_frame,
-  total_length_km,
-  frame_buffer_km = 0.5,
-  angle_deg = 0,
-  min_length_km = 5,
-  max_length_km = 1000,
-  break_buffer_km = 0.5,
-  min_space_km = 1
-) {
+generate_transects <- function(sampling_frame,
+                               total_length_km,
+                               frame_buffer_km = 0.5,
+                               angle_deg = 0,
+                               min_length_km = 5,
+                               max_length_km = 1000,
+                               break_buffer_km = 0.5,
+                               min_space_km = 1) {
 
   # convert all distances to meters
   total_length <- total_length_km * 1000
@@ -97,8 +95,11 @@ generate_transects <- function(
   # rotate sampling frame counter-clockwise if needed
     # (simpler to rotate sampling frame and generate vertical transects)
   if (!is.null(angle_deg) && angle_deg != 0) {
+    ctr <- tgt_poly |>
+      sf::st_union() |>
+      sf::st_centroid()
     tgt_poly <- tgt_poly |>
-      rotate_geometry(angle_deg * -1)
+      rotate_geometry(angle_deg * -1, ctr = ctr)
   }
 
   # combine sampling frame polygons
@@ -121,7 +122,7 @@ generate_transects <- function(
   # rotate transects clockwise if needed to align with original sampling frame
   if (!is.null(angle_deg) && angle_deg != 0) {
     tr <- tr |>
-      rotate_geometry(angle_deg)
+      rotate_geometry(angle_deg, ctr = ctr)
   }
 
   # apply crs
@@ -129,14 +130,14 @@ generate_transects <- function(
 
   # number transects by source polygon and calculate length
   jn <- sampling_frame |>
-    dplyr::mutate(polygon_id = dplyr::row_number()) |>
+    dplyr::mutate(polygon_number = dplyr::row_number()) |>
     sf::st_set_agr("constant")
 
   tr <- tr |>
     sf::st_set_agr("constant") |>
     sf::st_join(jn, largest = TRUE) |>
     suppressWarnings() |>
-    dplyr::group_by(.data$polygon_id) |>
+    dplyr::group_by(.data$polygon_number) |>
     dplyr::mutate(transect_number = dplyr::row_number()) |>
     dplyr::ungroup() |>
     dplyr::mutate(
@@ -241,14 +242,12 @@ break_transects <- function(lines, max_length, buffer) {
 #'
 #' @keywords internal
 #'
-test_spacing <- function(
-  spacing,
-  poly,
-  min_length,
-  max_length,
-  buffer,
-  target_length
-) {
+test_spacing <- function(spacing,
+                         poly,
+                         min_length,
+                         max_length,
+                         buffer,
+                         target_length) {
 
   # get extent
   bbox <- sf::st_bbox(poly)
@@ -390,14 +389,12 @@ create_transects <- function(opt_spacing) {
 #'
 #' @keywords internal
 #'
-optimal_transect_spacing <- function(
-  poly,
-  min_length,
-  max_length,
-  buffer,
-  min_space,
-  target_length
-) {
+optimal_transect_spacing <- function(poly,
+                                     min_length,
+                                     max_length,
+                                     buffer,
+                                     min_space,
+                                     target_length) {
 
   fn_args <- as.list(environment())
 
@@ -452,5 +449,140 @@ optimal_transect_spacing <- function(
     list(spacing = opt_3$minimum, abs_difference = opt_3$objective),
     fn_args
   )
+
+}
+
+#' Demo Transect Generation
+#'
+#' A much more verbose version of \code{generate_transects} meant to demonstrate
+#'   the steps in that function with plots and console messages.
+#'
+#' @inheritParams generate_transects
+#' @seealso generate_transects
+#'
+#' @return Returns an \code{sf} object identical to that produced by
+#'   \code{generate_transects}
+#'
+#' @export
+#'
+demo_gen_transects <- function(sampling_frame,
+                               total_length_km,
+                               frame_buffer_km = 0.5,
+                               angle_deg = 0,
+                               min_length_km = 5,
+                               max_length_km = 1000,
+                               break_buffer_km = 0.5,
+                               min_space_km = 1) {
+
+  # convert all distances to meters
+  total_length <- total_length_km * 1000
+  frame_buffer <- frame_buffer_km * 1000
+  min_length <- min_length_km * 1000
+  max_length <- max_length_km * 1000
+  break_buffer <- break_buffer_km * 1000
+  min_space <- min_space_km * 1000
+
+  tgt_poly <- sampling_frame
+
+  print(glue::glue("Generating transects for {nrow(tgt_poly)} polygons"))
+
+  tgt_poly |>
+    sf::st_geometry() |>
+    plot(main = "Sampling Frame")
+
+  # apply internal buffer to sampling frame polygons
+  if (!is.null(frame_buffer) && frame_buffer > 0) {
+    print(glue::glue("Buffering polygons internally by {frame_buffer} meters"))
+    tgt_poly <- tgt_poly |>
+      sf::st_buffer(frame_buffer * -1)
+    tgt_poly |>
+      sf::st_geometry() |>
+      plot(main = "Sampling Frame After Internal Buffer")
+  }
+
+  # rotate sampling frame counter-clockwise if needed
+  # (simpler to rotate sampling frame and generate vertical transects)
+  if (!is.null(angle_deg) && angle_deg != 0) {
+    print(glue::glue("Rotating polygons by {angle_deg * -1} degrees"))
+    ctr <- tgt_poly |>
+      sf::st_union() |>
+      sf::st_centroid()
+    tgt_poly <- tgt_poly |>
+      rotate_geometry(angle_deg * -1, ctr = ctr)
+    tgt_poly |>
+      sf::st_geometry() |>
+      plot(main = "Sampling Frame After Rotation")
+  }
+
+  # combine sampling frame polygons
+  print(glue::glue("Combining polygons"))
+  tgt_poly <- tgt_poly |>
+    sf::st_union()
+  tgt_poly |>
+    sf::st_geometry() |>
+    plot(main = "Sampling Frame After st_union")
+
+  # determine optimal transect spacing
+  print(
+    glue::glue(
+      "Determining optimal transect spacing for target length {total_length} m"
+    )
+  )
+  opt_sp <- optimal_transect_spacing(
+    tgt_poly,
+    min_length,
+    max_length,
+    break_buffer,
+    min_space,
+    total_length
+  )
+  print(glue::glue("Optimal spacing: {opt_sp$spacing} m"))
+
+  # create transects using optimal spacing
+  print(glue::glue("Creating transects"))
+  tr <- create_transects(opt_sp)
+  print(glue::glue("Resulting total length: {sum(sf::st_length(tr))} m"))
+  tgt_poly |>
+    sf::st_geometry() |>
+    plot(main = "Adjusted Sampling Frame with Transects")
+  plot(tr, add = TRUE)
+
+  # rotate transects clockwise if needed to align with original sampling frame
+  if (!is.null(angle_deg) && angle_deg != 0) {
+    print(glue::glue("Rotating transects by {angle_deg} degrees"))
+    tr <- tr |>
+      rotate_geometry(angle_deg, ctr = ctr)
+  }
+  sampling_frame |>
+    sf::st_geometry() |>
+    plot(main = "Original Sampling Frame with Transects")
+  plot(tr, add = TRUE)
+
+  # apply crs
+  sf::st_crs(tr) <- sf::st_crs(sampling_frame)
+
+  # number transects by source polygon and calculate length
+  jn <- sampling_frame |>
+    dplyr::mutate(polygon_number = dplyr::row_number()) |>
+    sf::st_set_agr("constant")
+
+  tr <- tr |>
+    sf::st_set_agr("constant") |>
+    sf::st_join(jn, largest = TRUE) |>
+    suppressWarnings() |>
+    dplyr::group_by(.data$polygon_number) |>
+    dplyr::mutate(transect_number = dplyr::row_number()) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      length = sf::st_length(tr),
+      transect_length_km = units::set_units(length, "km"),
+      transect_length_mi = units::set_units(length, "mi")
+    ) |>
+    dplyr::select(-length)
+
+  # return transects with spacing in attributes
+  attr(tr, "spacing_km") <- opt_sp$spacing / 1000
+
+  tr
 
 }

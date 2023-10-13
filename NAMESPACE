@@ -2,6 +2,7 @@
 
 export(condense_spatial_files)
 export(count_spatial_files)
+export(demo_gen_transects)
 export(generate_transects)
 export(labeled_kml)
 export(rotate_geometry)
