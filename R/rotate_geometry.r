@@ -5,9 +5,12 @@
 #'
 #' @param sf \code{sf} object to rotate
 #' @param deg Numeric - number of degrees to rotate \code{sf} object by
+#' @param ctr \code{sf} point to rotate geometry around. The centroid is used if
+#'   \code{ctr} is \code{NULL}.
 #' @param byrow Logical - if \code{byrow} = \code{TRUE} then geometries are each
 #'   rotated independently around their own centroid; if \code{byrow} = FALSE
-#'   geometries are rotated together around the common centroid
+#'   geometries are rotated together around the common centroid. Ignored if
+#'   \code{ctr} is specified.
 #'
 #' @return Returns an \code{sf} object with rotated geometries
 #' @export
@@ -31,17 +34,19 @@
 #'
 #' }
 #'
-rotate_geometry = function(sf, deg, byrow = FALSE) {
+rotate_geometry = function(sf, deg, ctr = NULL, byrow = FALSE) {
 
   out <- sf
   rmat <- rotation_matrix(deg)
   g <- sf::st_geometry(out)
 
-  if (byrow) {
-    ctr <- sf::st_centroid(g)
-  } else {
-    ctr <- sf::st_union(g) |>
-      sf::st_centroid()
+  if (is.null(ctr)) {
+    if (byrow) {
+      ctr <- sf::st_centroid(g)
+    } else {
+      ctr <- sf::st_union(g) |>
+        sf::st_centroid()
+    }
   }
 
   g <- (g - ctr) * rmat + ctr

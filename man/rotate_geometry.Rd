@@ -4,16 +4,20 @@
 \alias{rotate_geometry}
 \title{Rotate SF Geometry}
 \usage{
-rotate_geometry(sf, deg, byrow = FALSE)
+rotate_geometry(sf, deg, ctr = NULL, byrow = FALSE)
 }
 \arguments{
 \item{sf}{\code{sf} object to rotate}
 
 \item{deg}{Numeric - number of degrees to rotate \code{sf} object by}
 
+\item{ctr}{\code{sf} point to rotate geometry around. The centroid is used if
+\code{ctr} is \code{NULL}.}
+
 \item{byrow}{Logical - if \code{byrow} = \code{TRUE} then geometries are each
 rotated independently around their own centroid; if \code{byrow} = FALSE
-geometries are rotated together around the common centroid}
+geometries are rotated together around the common centroid. Ignored if
+\code{ctr} is specified.}
 }
 \value{
 Returns an \code{sf} object with rotated geometries
