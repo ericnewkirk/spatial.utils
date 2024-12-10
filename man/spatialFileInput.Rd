@@ -19,9 +19,9 @@ spatialFileInputHandler(input_value, multiple = FALSE, crs = 4326)
 
 \item{label}{Display label for the control, or \code{NULL} for no label.}
 
-\item{accept}{A character vector of "unique file type specifiers" which
-gives the browser a hint as to the type of file the server expects.
-Many browsers use this prevent the user from selecting an invalid file.
+\item{accept}{A character vector of "unique file type specifiers" which gives
+the browser a hint as to the type of file the server expects. Many browsers
+use this prevent the user from selecting an invalid file.
 
 A unique file type specifier can be:
 \itemize{

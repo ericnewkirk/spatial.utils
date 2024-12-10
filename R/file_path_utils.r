@@ -106,7 +106,7 @@ count_spatial_files <- function(files) {
 #' condense_spatial_files(f)
 #'
 #' # so purrr::map_dfr(condense_spatial_files(f), sf::st_read) will work even
-#'   # with a mix of shapefles and other file types
+#'   # with a mix of shapefiles and other file types
 #'
 condense_spatial_files <- function(files) {
 
