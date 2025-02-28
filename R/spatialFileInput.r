@@ -118,16 +118,21 @@ spatialFileInputHandler <- function(input_value,
 
   # now read files into sf object
   out <- try(
-    read_files |>
-      dplyr::pull("new_path") |>
-      condense_spatial_files() |>
-      purrr::map_dfr(
-        \(x) sf::read_sf(x) |>
-          sf::st_make_valid() |>
-          sf::st_transform(crs) |>
-          sf::st_zm() |>
-          sf::st_set_agr("constant")
-      ),
+    {
+      x <- read_files |>
+        dplyr::pull("new_path") |>
+        condense_spatial_files() |>
+        purrr::map_dfr(sf::read_sf)
+
+      if (!all(sf::st_is_valid(x))) {
+        x <- sf::st_make_valid(x)
+      }
+
+      x |>
+        sf::st_transform(crs) |>
+        sf::st_zm() |>
+        sf::st_set_agr("constant")
+    },
     silent = TRUE
   )
 
