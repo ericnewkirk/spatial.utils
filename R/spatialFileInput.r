@@ -158,7 +158,7 @@ spatialFileInputHandler <- function(input_value,
 #' @keywords internal
 #'
 read_sf_wrapper <- function(file_path) {
-  lyr_names <- sf::st_layers(file_path)$layer_name
+  lyr_names <- sf::st_layers(file_path)$name
   layers <- purrr::map(lyr_names, function(l) sf::read_sf(file_path, layer = l))
   dplyr::bind_rows(layers)
 }
