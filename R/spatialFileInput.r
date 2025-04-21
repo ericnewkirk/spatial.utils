@@ -122,7 +122,8 @@ spatialFileInputHandler <- function(input_value,
       x <- read_files |>
         dplyr::pull("new_path") |>
         condense_spatial_files() |>
-        purrr::map_dfr(sf::read_sf) |>
+        purrr::map(read_sf_wrapper) |>
+        dplyr::bind_rows() |>
         sf::st_zm() |>
         sf::st_set_agr("constant")
 
@@ -143,4 +144,21 @@ spatialFileInputHandler <- function(input_value,
 
   out
 
+}
+
+#' read_sf_wrapper
+#'
+#' A wrapper for \code{\link[sf]{read_sf}} that reads all layers from files that
+#'   support multiple layers, such as .kml files
+#'
+#' @param file_path Path to a spatial file
+#'
+#' @return \code{sf} object
+#' 
+#' @keywords internal
+#'
+read_sf_wrapper <- function(file_path) {
+  lyr_names <- sf::st_layers(file_path)$layer_name
+  layers <- purrr::map(lyr_names, function(l) sf::read_sf(file_path, layer = l))
+  dplyr::bind_rows(layers)
 }

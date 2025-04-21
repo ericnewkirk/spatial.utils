@@ -34,7 +34,7 @@
 #'
 #' }
 #'
-rotate_geometry = function(sf, deg, ctr = NULL, byrow = FALSE) {
+rotate_geometry <- function(sf, deg, ctr = NULL, byrow = FALSE) {
 
   out <- sf
   rmat <- rotation_matrix(deg)
@@ -68,7 +68,7 @@ rotate_geometry = function(sf, deg, ctr = NULL, byrow = FALSE) {
 #'
 #' @keywords internal
 #'
-rotation_matrix = function(deg) {
+rotation_matrix <- function(deg) {
   rad <- deg * pi / 180
   matrix(c(cos(rad), sin(rad), -sin(rad), cos(rad)), 2, 2)
 }
