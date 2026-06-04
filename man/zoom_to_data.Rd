@@ -4,12 +4,15 @@
 \alias{zoom_to_data}
 \title{Zoom to Data Extent}
 \usage{
-zoom_to_data(lf, sf_data)
+zoom_to_data(lf, sf_data, max_zoom = 18)
 }
 \arguments{
 \item{lf}{\code{leaflet} or \code{leafletProxy} object}
 
 \item{sf_data}{\code{sf} object}
+
+\item{max_zoom}{integer maximum zoom level passed via the \code{options}
+argument of \code{leaflet::fitBounds}}
 }
 \value{
 input \code{leaflet} or \code{leafletProxy} object zoomed to fit

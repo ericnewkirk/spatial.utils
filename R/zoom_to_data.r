@@ -4,6 +4,8 @@
 #'
 #' @param lf \code{leaflet} or \code{leafletProxy} object
 #' @param sf_data \code{sf} object
+#' @param max_zoom integer maximum zoom level passed via the \code{options}
+#'   argument of \code{leaflet::fitBounds}
 #'
 #' @return input \code{leaflet} or \code{leafletProxy} object zoomed to fit
 #'   the extent of the \code{sf_data} object
