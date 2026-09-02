@@ -4,13 +4,15 @@
 \alias{wgfd_agol_data}
 \title{WGFD AGOL Data}
 \usage{
-wgfd_agol_data(layer_name, crs = 4326)
+wgfd_agol_data(layer_name, crs = 4326, layer_index = 0L)
 }
 \arguments{
 \item{layer_name}{Name of the layer to download}
 
 \item{crs}{The coordinate reference system for the output \code{sf} object,
 see \code{\link[sf]{st_crs}}}
+
+\item{layer_index}{Numeric index of the layer within the feature server}
 }
 \value{
 \code{sf} object

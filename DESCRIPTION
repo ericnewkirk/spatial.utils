@@ -1,7 +1,7 @@
 Package: spatial.utils
 Type: Package
 Title: General spatial utilities in R
-Version: 0.1.02
+Version: 0.1.03
 Author: WGFD SRA
 Maintainer: Eric Newkirk <eric.newkirk@wyo.gov>
 Description: Functions for common spatial operations and conversions.
