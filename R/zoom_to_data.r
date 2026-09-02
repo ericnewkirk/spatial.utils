@@ -14,14 +14,14 @@
 #' @examples
 #'
 #' if (interactive()) {
-#' 
+#'
 #'   # zoom to north carolina counties dataset
 #'   nc <- sf::read_sf(system.file("shape/nc.shp", package="sf"))
-#' 
+#'
 #'   leaflet::leaflet() |>
 #'     leaflet::addProviderTiles("Esri.WorldImagery") |>
 #'     spatial.utils::zoom_to_data(nc)
-#' 
+#'
 #' }
 #'
 zoom_to_data <- function(lf, sf_data, max_zoom = 18) {

@@ -1,5 +1,5 @@
 #' DMS to DD
-#' 
+#'
 #' Convert strings in degree-minute-second format to decimal degrees
 #'
 #' @param dms string in degree-minute-second format
@@ -15,9 +15,9 @@
 #'   "-106D 51m 57.37s W",
 #'   "106 deg 51' West"
 #' )
-#' 
+#'
 #' dms_to_dd(dms_examples)
-#' 
+#'
 dms_to_dd <- function(dms) {
 
   d_m_s <- stringr::str_extract_all(dms, "([0-9.]+)")

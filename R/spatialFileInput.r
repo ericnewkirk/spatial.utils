@@ -154,7 +154,7 @@ spatialFileInputHandler <- function(input_value,
 #' @param file_path Path to a spatial file
 #'
 #' @return \code{sf} object
-#' 
+#'
 #' @keywords internal
 #'
 read_sf_wrapper <- function(file_path) {
