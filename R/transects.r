@@ -586,3 +586,186 @@ demo_gen_transects <- function(sampling_frame,
   tr
 
 }
+
+#' get_transect_angle
+#'
+#' @description Calculate bearing of existing transects
+#'
+#' @param transects \code{sf} object with the transect lines
+#' @param avg logical determining if a single average bearing is returned
+#' @param north_up logical determining if all lines are conidered to run
+#'   from their southerly endpoint to their northerly endpoint, i.e. all
+#'   calculated bearings will be betweeen 270 and 90 degrees
+#' @param digits Integer defining the number of decimal digits to which
+#'   calculated bearings are rounded
+#'
+#' @return If \code{avg} is \code{TRUE} the average bearing across all
+#'   lines is returned, otherwise a numeric vector is returned containing the
+#'   bearing for each feature
+#'
+#' @export
+#'
+#' @examples
+#'
+#' # Create transects
+#' tr <- sf::st_as_sf(tibble::tibble(
+#'   name = c("11_1", "11_2", "11_3", "11_4", "11_5"),
+#'   description = c(
+#'     "Meadowdale_RawhideButte_1; 9.25 km; 5.75 mi;",
+#'     "Meadowdale_RawhideButte_2; 15.71 km; 9.76 mi;",
+#'     "Meadowdale_RawhideButte_3; 20.00 km; 12.43 mi;",
+#'     "Meadowdale_RawhideButte_4; 19.59 km; 12.17 mi;",
+#'     "Meadowdale_RawhideButte_5; 32.58 km; 20.24 mi;"
+#'   ),
+#'   geometry = sf::st_as_sfc(c(
+#'     "LINESTRING(-105.0879 42.7024, -105.0912 42.6192)",
+#'     "LINESTRING(-105.037 42.7342, -105.0426 42.5928)",
+#'     "LINESTRING(-104.9864 42.7538, -104.9937 42.5737)",
+#'     "LINESTRING(-104.9363 42.7617, -104.9436 42.5853)",
+#'     "LINESTRING(-104.8866 42.7597, -104.899 42.4663)"
+#'   ), crs = 4326)
+#' ))
+#'
+#' # Calculate average bearing
+#' avg_tr_angle <- get_transect_angle(tr)
+#'
+#' # Calculate bearing for each feature
+#' tr_angles <- get_transect_angle(tr, avg = FALSE)
+#'
+get_transect_angle <- function(transects, avg = TRUE, north_up = TRUE, digits = 0) {
+
+  # get endpoint coordinates
+  out <- transects |>
+    sf::st_transform(32159) |>
+    sf::st_set_agr("constant") |>
+    sf::st_cast("POINT") |>
+    sf::st_geometry() |>
+    sf::st_coordinates()
+
+  # calculate deltas
+  out <- out[seq(2, nrow(out), 2), ] -
+    out[seq(1, nrow(out), 2), ]
+
+  # force delta Y to be positive if north_up is TRUE
+  if (north_up) {
+    idx <- out[, 2] < 0
+    out[idx, 1:2] <- out[idx, 1:2] * -1
+  }
+
+  out <- cbind(
+    out,
+    ThetaRadians = atan2(out[, 2], out[, 1]),
+    ThetaDegrees = atan2(out[, 2], out[, 1]) * 180 / pi,
+    Bearing = (90 - atan2(out[, 2], out[, 1]) * 180 / pi) %% 360
+  )
+
+  idx <- out[, 5] < 0
+  out[idx, 5] <- out[idx, 5] + 360
+
+  if (avg) {
+    mean_sin <- mean(sin(out[, 3]))
+    mean_cos <- mean(cos(out[, 3]))
+    out <- round((90 - atan2(mean_sin, mean_cos) * 180 / pi) %% 360, digits)
+    out <- ifelse(out == 360, 0, out)
+  } else {
+    out[, 5] <- round(out[, 5], digits)
+    idx <- out[, 5] == 360
+    out[idx, 5] <- 0
+    out <- as.numeric(out[, 5])
+  }
+
+  out
+
+}
+
+#' get_transect_spacing
+#'
+#' @description Attempt to reverse engineer the spacing used to generate a set
+#'   of transects
+#'
+#' @param transects \code{sf} object with the transect lines
+#'
+#' @return A numeric scalar representing the estimated transect spacing in
+#'   meters
+#'
+#' @export
+#'
+#' @examples
+#'
+#' # Create transects
+#' tr <- sf::st_as_sf(tibble::tibble(
+#'   name = c("11_1", "11_2", "11_3", "11_4", "11_5"),
+#'   description = c(
+#'     "Meadowdale_RawhideButte_1; 9.25 km; 5.75 mi;",
+#'     "Meadowdale_RawhideButte_2; 15.71 km; 9.76 mi;",
+#'     "Meadowdale_RawhideButte_3; 20.00 km; 12.43 mi;",
+#'     "Meadowdale_RawhideButte_4; 19.59 km; 12.17 mi;",
+#'     "Meadowdale_RawhideButte_5; 32.58 km; 20.24 mi;"
+#'   ),
+#'   geometry = sf::st_as_sfc(c(
+#'     "LINESTRING(-105.0879 42.7024, -105.0912 42.6192)",
+#'     "LINESTRING(-105.037 42.7342, -105.0426 42.5928)",
+#'     "LINESTRING(-104.9864 42.7538, -104.9937 42.5737)",
+#'     "LINESTRING(-104.9363 42.7617, -104.9436 42.5853)",
+#'     "LINESTRING(-104.8866 42.7597, -104.899 42.4663)"
+#'   ), crs = 4326)
+#' ))
+#'
+#' # Estimate spacing
+#' tr_spacing <- get_transect_spacing(tr)
+#'
+get_transect_spacing <- function(transects) {
+
+  # convert to wylam
+  x <- sf::st_transform(transects, 32159)
+
+  # get transect angle and rotate to N-S orientation
+  tr_angle <- get_transect_angle(x)
+  ctr <- sf::st_centroid(sf::st_union(x))
+  x <- rotate_geometry(x, tr_angle * -1, ctr = ctr)
+
+  # get endpoint coordinates
+  xy <- x |>
+    sf::st_set_agr("constant") |>
+    sf::st_cast("POINT") |>
+    sf::st_geometry() |>
+    sf::st_coordinates() |>
+    tibble::as_tibble()
+
+  # cluster by x coordinate and find nearest non-clustered x
+  xy <- xy |>
+    dplyr::group_by(
+      xclust = stats::cutree(
+        stats::hclust(stats::dist(.data$X)),
+        h = 100
+      )
+    ) |>
+    dplyr::summarize(
+      X = mean(.data$X),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      nearest_dist = apply(
+        stats::dist(.data$X),
+        1,
+        \(row) min(row[row > 0], na.rm = TRUE)
+      )
+    )
+
+  # cluster again by nearest and take the average of the biggest cluster
+  xy |>
+    dplyr::group_by(
+      distclust = stats::cutree(
+        stats::hclust(stats::dist(.data$nearest_dist)),
+        h = 100
+      )
+    ) |>
+    dplyr::summarize(
+      spacing = mean(.data$nearest_dist),
+      freq = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::slice_max(.data$freq) |>
+    dplyr::pull(.data$spacing)
+
+}
