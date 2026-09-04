@@ -1,7 +1,7 @@
 Package: spatial.utils
 Type: Package
 Title: General spatial utilities in R
-Version: 0.1.03
+Version: 0.1.04
 Author: WGFD SRA
 Maintainer: Eric Newkirk <eric.newkirk@wyo.gov>
 Description: Functions for common spatial operations and conversions.
@@ -9,8 +9,8 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports:
+  cli,
   dplyr,
-  glue,
   httr,
   jsonlite,
   leaflet,
