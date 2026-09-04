@@ -12,6 +12,7 @@ Imports:
   dplyr,
   glue,
   httr,
+  jsonlite,
   leaflet,
   purrr,
   rlang,
@@ -21,5 +22,7 @@ Imports:
   stringr,
   units
 Suggests:
+  leaflet.extras,
+  reactable,
   tibble
 RoxygenNote: 7.3.2
