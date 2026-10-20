@@ -11,11 +11,11 @@
 #' @examples
 #'
 #' if (interactive()) {
-#' 
+#'
 #'   leaflet::leaflet() |>
 #'     leaflet::addProviderTiles("Esri.WorldImagery") |>
 #'     spatial.utils::zoom_wy()
-#' 
+#'
 #' }
 #'
 zoom_wy <- function(lf) {

@@ -7,12 +7,15 @@
 demo_gen_transects(
   sampling_frame,
   total_length_km,
-  frame_buffer_km = 0.5,
+  frame_buffer_km = 0,
+  internal_buffer_km = 1,
   angle_deg = 0,
   min_length_km = 5,
   max_length_km = 1000,
-  break_buffer_km = 0.5,
-  min_space_km = 1
+  break_buffer_km = 1,
+  min_space_km = 1,
+  proj_crs = 32159,
+  out_crs = 4326
 )
 }
 \arguments{
@@ -21,9 +24,12 @@ demo_gen_transects(
 
 \item{total_length_km}{Total length of transects to generate in kilometers}
 
-\item{frame_buffer_km}{Distance from polygon edges in kilometers at which
-transects start or stop. The actual area allowed for placing transects is
-\code{sf::st_buffer(sampling_frame, frame_buffer_km * -1000)}.}
+\item{frame_buffer_km}{Distance from outer polygon edges in kilometers at
+which transects start or stop.}
+
+\item{internal_buffer_km}{Distance from interior polygon edges in kilometers
+at which transects start or stop when \code{sampling_frame} includes
+multiple polygon features.}
 
 \item{angle_deg}{Orientation of the output transects in degrees.}
 
@@ -43,6 +49,11 @@ endpoints of the new transects, so the resulting transect endpoints will be
 
 \item{min_space_km}{Minimal interval in kilometers to consider for transect
 spacing. Should be larger than the width of a single transect at a minimum.}
+
+\item{proj_crs}{Coordinate reference system used for enforcing valid
+geometries. Must be a projected coordinate system such as WYLAM.}
+
+\item{out_crs}{Coordinate reference system of the returned \code{sf} object.}
 }
 \value{
 Returns an \code{sf} object identical to that produced by

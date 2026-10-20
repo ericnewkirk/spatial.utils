@@ -7,9 +7,11 @@
 #' @param sampling_frame \code{sf} object  with the polygon(s) to be surveyed.
 #'   \code{sampling_frame} should use a projected CRS with meters as the unit.
 #' @param total_length_km Total length of transects to generate in kilometers
-#' @param frame_buffer_km Distance from polygon edges in kilometers at which
-#'   transects start or stop. The actual area allowed for placing transects is
-#'   \code{sf::st_buffer(sampling_frame, frame_buffer_km * -1000)}.
+#' @param frame_buffer_km Distance from outer polygon edges in kilometers at
+#'   which transects start or stop.
+#' @param internal_buffer_km Distance from interior polygon edges in kilometers
+#'   at which transects start or stop when \code{sampling_frame} includes
+#'   multiple polygon features.
 #' @param angle_deg Orientation of the output transects in degrees.
 #' @param min_length_km Minimum length in kilometers for any individual
 #'   transect. Transects shorter than \code{min_length_km} are discarded from
@@ -24,6 +26,9 @@
 #'   \code{break_buffer_km * 2} kilometers apart.
 #' @param min_space_km Minimal interval in kilometers to consider for transect
 #'   spacing. Should be larger than the width of a single transect at a minimum.
+#' @param proj_crs Coordinate reference system used for enforcing valid
+#'   geometries. Must be a projected coordinate system such as WYLAM.
+#' @param out_crs Coordinate reference system of the returned \code{sf} object.
 #'
 #' @return Returns an \code{sf} object with features of type \code{LINESTRING}
 #'   with a special attribute \code{spacing_km} that contains the spacing used
@@ -69,31 +74,53 @@
 #'
 generate_transects <- function(sampling_frame,
                                total_length_km,
-                               frame_buffer_km = 0.5,
+                               frame_buffer_km = 0,
+                               internal_buffer_km = 1,
                                angle_deg = 0,
                                min_length_km = 5,
                                max_length_km = 1000,
-                               break_buffer_km = 0.5,
-                               min_space_km = 1) {
+                               break_buffer_km = 1,
+                               min_space_km = 1,
+                               proj_crs = 32159,
+                               out_crs = 4326) {
 
   # convert all distances to meters
   total_length <- total_length_km * 1000
   frame_buffer <- frame_buffer_km * 1000
+  internal_buffer <- internal_buffer_km * 1000
   min_length <- min_length_km * 1000
   max_length <- max_length_km * 1000
   break_buffer <- break_buffer_km * 1000
   min_space <- min_space_km * 1000
 
-  tgt_poly <- sampling_frame
+  # convert sampling frame to projected crs
+  tgt_poly <- sf::st_transform(sampling_frame, proj_crs) |>
+    sf::st_set_agr("constant")
 
-  # apply internal buffer to sampling frame polygons
-  if (!is.null(frame_buffer) && frame_buffer > 0) {
-    tgt_poly <- tgt_poly |>
-      sf::st_buffer(frame_buffer * -1)
-  }
+  # get geometry column name for intermediate objects and output
+  geom_col_name <- attr(tgt_poly, "sf_column")
+
+  # remove buffered outer and inner boundaries
+  outer_boundary <- tgt_poly |>
+    sf::st_union() |>
+    sf::st_cast("MULTILINESTRING") |>
+    sf::st_as_sf(agr = "constant") |>
+    sf::st_set_geometry(geom_col_name)
+
+  inner_boundaries <- tgt_poly |>
+    sf::st_cast("MULTILINESTRING") |>
+    sf::st_difference(outer_boundary) |>
+    sf::st_set_agr("constant") |>
+    sf::st_buffer(internal_buffer)
+
+  rm_buffers <- outer_boundary |>
+    sf::st_buffer(frame_buffer) |>
+    dplyr::bind_rows(inner_boundaries) |>
+    sf::st_union()
+
+  tgt_poly <- sf::st_difference(tgt_poly, rm_buffers)
 
   # rotate sampling frame counter-clockwise if needed
-    # (simpler to rotate sampling frame and generate vertical transects)
   if (!is.null(angle_deg) && angle_deg != 0) {
     ctr <- tgt_poly |>
       sf::st_union() |>
@@ -117,7 +144,7 @@ generate_transects <- function(sampling_frame,
   )
 
   # create transects using optimal spacing
-  tr <- create_transects(opt_sp)
+  tr <- create_transects(opt_sp, proj_crs)
 
   # rotate transects clockwise if needed to align with original sampling frame
   if (!is.null(angle_deg) && angle_deg != 0) {
@@ -125,27 +152,29 @@ generate_transects <- function(sampling_frame,
       rotate_geometry(angle_deg, ctr = ctr)
   }
 
-  # apply crs
-  sf::st_crs(tr) <- sf::st_crs(sampling_frame)
-
   # number transects by source polygon and calculate length
   jn <- sampling_frame |>
     dplyr::mutate(polygon_number = dplyr::row_number()) |>
-    sf::st_set_agr("constant")
+    sf::st_transform(proj_crs)
 
   tr <- tr |>
-    sf::st_set_agr("constant") |>
     sf::st_join(jn, largest = TRUE) |>
-    suppressWarnings() |>
+    suppressWarnings() |> # agr = "constant" doesn't help with st_join
     dplyr::group_by(.data$polygon_number) |>
     dplyr::mutate(transect_number = dplyr::row_number()) |>
     dplyr::ungroup() |>
     dplyr::mutate(
       length = sf::st_length(tr),
       transect_length_km = units::set_units(length, "km"),
-      transect_length_mi = units::set_units(length, "mi")
+      transect_length_mi = units::set_units(length, "mi"),
+      length = NULL
     ) |>
-    dplyr::select(-length)
+    sf::st_set_geometry(geom_col_name) |>
+    dplyr::relocate(
+      dplyr::all_of(geom_col_name),
+      .after = dplyr::last_col()
+    ) |>
+    sf::st_transform(out_crs)
 
   # return transects with spacing in attributes
   attr(tr, "spacing_km") <- opt_sp$spacing / 1000
@@ -298,12 +327,13 @@ test_spacing <- function(spacing,
 #' @param opt_spacing A list produced by \code{optimal_transect_spacing}
 #'   containing the spacing in meters and the arguments used to call the
 #'   function
+#' @inheritParams generate_transects
 #'
 #' @return Returns an \code{sf} object with features of type \code{LINESTRING}
 #'
 #' @keywords internal
 #'
-create_transects <- function(opt_spacing) {
+create_transects <- function(opt_spacing, proj_crs = 32159) {
 
   # unpack args passed in list
   spacing <- opt_spacing$spacing
@@ -362,7 +392,8 @@ create_transects <- function(opt_spacing) {
     tibble::rowid_to_column(var = "LineID") |>
     dplyr::inner_join(xy, by = "LineID") |>
     dplyr::arrange(.data$min_x, dplyr::desc(.data$max_y)) |>
-    dplyr::select(-dplyr::all_of(c("min_x", "max_y")))
+    dplyr::select(-dplyr::all_of(c("min_x", "max_y"))) |>
+    sf::st_set_crs(proj_crs)
 
 }
 
@@ -467,43 +498,88 @@ optimal_transect_spacing <- function(poly,
 #'
 demo_gen_transects <- function(sampling_frame,
                                total_length_km,
-                               frame_buffer_km = 0.5,
+                               frame_buffer_km = 0,
+                               internal_buffer_km = 1,
                                angle_deg = 0,
                                min_length_km = 5,
                                max_length_km = 1000,
-                               break_buffer_km = 0.5,
-                               min_space_km = 1) {
+                               break_buffer_km = 1,
+                               min_space_km = 1,
+                               proj_crs = 32159,
+                               out_crs = 4326) {
 
   # convert all distances to meters
   total_length <- total_length_km * 1000
   frame_buffer <- frame_buffer_km * 1000
+  internal_buffer <- internal_buffer_km * 1000
   min_length <- min_length_km * 1000
   max_length <- max_length_km * 1000
   break_buffer <- break_buffer_km * 1000
   min_space <- min_space_km * 1000
 
-  tgt_poly <- sampling_frame
+  # convert sampling frame to projected crs
+  tgt_poly <- sf::st_transform(sampling_frame, proj_crs) |>
+    sf::st_set_agr("constant")
 
-  print(glue::glue("Generating transects for {nrow(tgt_poly)} polygons"))
+  cli::cli_inform(c(
+    i = "Generating transects for {nrow(tgt_poly)} polygon{?s}"
+  ))
 
   tgt_poly |>
     sf::st_geometry() |>
     plot(main = "Sampling Frame")
 
-  # apply internal buffer to sampling frame polygons
+  # get geometry column name for intermediate objects and output
+  geom_col_name <- attr(tgt_poly, "sf_column")
+
+  # remove buffered outer and inner boundaries
+  outer_boundary <- tgt_poly |>
+    sf::st_union() |>
+    sf::st_cast("MULTILINESTRING") |>
+    sf::st_as_sf(agr = "constant") |>
+    sf::st_set_geometry(geom_col_name)
+
   if (!is.null(frame_buffer) && frame_buffer > 0) {
-    print(glue::glue("Buffering polygons internally by {frame_buffer} meters"))
-    tgt_poly <- tgt_poly |>
-      sf::st_buffer(frame_buffer * -1)
-    tgt_poly |>
-      sf::st_geometry() |>
-      plot(main = "Sampling Frame After Internal Buffer")
+    cli::cli_inform(c(
+      i = "Buffering polygons by {frame_buffer} meters from exterior boundary"
+    ))
   }
 
+  inner_boundaries <- tgt_poly |>
+    sf::st_cast("MULTILINESTRING") |>
+    sf::st_difference(outer_boundary) |>
+    sf::st_set_agr("constant") |>
+    sf::st_buffer(internal_buffer)
+
+  if (!is.null(frame_buffer) && frame_buffer > 0) {
+    cli::cli_inform(c(
+      i = paste(
+        "Buffering polygons by {internal_buffer} meters",
+        "from internal boundaries"
+      )
+    ))
+  }
+
+  rm_buffers <- outer_boundary |>
+    sf::st_buffer(frame_buffer) |>
+    dplyr::bind_rows(inner_boundaries) |>
+    sf::st_union()
+
+  rm_buffers |>
+    sf::st_geometry() |>
+    plot(main = "Exclusion Buffers")
+
+  tgt_poly <- sf::st_difference(tgt_poly, rm_buffers)
+
+  tgt_poly |>
+    sf::st_geometry() |>
+    plot(main = "Sampling Frame with Buffers Applied")
+
   # rotate sampling frame counter-clockwise if needed
-  # (simpler to rotate sampling frame and generate vertical transects)
   if (!is.null(angle_deg) && angle_deg != 0) {
-    print(glue::glue("Rotating polygons by {angle_deg * -1} degrees"))
+    cli::cli_inform(c(
+      i = "Rotating polygons by {angle_deg * -1} degrees"
+    ))
     ctr <- tgt_poly |>
       sf::st_union() |>
       sf::st_centroid()
@@ -515,7 +591,7 @@ demo_gen_transects <- function(sampling_frame,
   }
 
   # combine sampling frame polygons
-  print(glue::glue("Combining polygons"))
+  cli::cli_inform(c(i = "Combining polygons"))
   tgt_poly <- tgt_poly |>
     sf::st_union()
   tgt_poly |>
@@ -523,11 +599,13 @@ demo_gen_transects <- function(sampling_frame,
     plot(main = "Sampling Frame After st_union")
 
   # determine optimal transect spacing
-  print(
-    glue::glue(
-      "Determining optimal transect spacing for target length {total_length} m"
+  cli::cli_inform(c(
+    i = paste(
+      "Determining optimal transect spacing for",
+      "target length {total_length} m"
     )
-  )
+  ))
+
   opt_sp <- optimal_transect_spacing(
     tgt_poly,
     min_length,
@@ -536,12 +614,12 @@ demo_gen_transects <- function(sampling_frame,
     min_space,
     total_length
   )
-  print(glue::glue("Optimal spacing: {opt_sp$spacing} m"))
+  cli::cli_inform(c(i = "Optimal spacing: {opt_sp$spacing} m"))
 
   # create transects using optimal spacing
-  print(glue::glue("Creating transects"))
-  tr <- create_transects(opt_sp)
-  print(glue::glue("Resulting total length: {sum(sf::st_length(tr))} m"))
+  cli::cli_inform(c(i = "Creating transects"))
+  tr <- create_transects(opt_sp, proj_crs)
+  cli::cli_inform(c(i = "Resulting total length: {sum(sf::st_length(tr))} m"))
   tgt_poly |>
     sf::st_geometry() |>
     plot(main = "Adjusted Sampling Frame with Transects")
@@ -549,40 +627,229 @@ demo_gen_transects <- function(sampling_frame,
 
   # rotate transects clockwise if needed to align with original sampling frame
   if (!is.null(angle_deg) && angle_deg != 0) {
-    print(glue::glue("Rotating transects by {angle_deg} degrees"))
+    cli::cli_inform(c(i = "Rotating transects by {angle_deg} degrees"))
     tr <- tr |>
       rotate_geometry(angle_deg, ctr = ctr)
   }
   sampling_frame |>
+    sf::st_transform(proj_crs) |>
     sf::st_geometry() |>
     plot(main = "Original Sampling Frame with Transects")
   plot(tr, add = TRUE)
 
-  # apply crs
-  sf::st_crs(tr) <- sf::st_crs(sampling_frame)
-
   # number transects by source polygon and calculate length
   jn <- sampling_frame |>
     dplyr::mutate(polygon_number = dplyr::row_number()) |>
-    sf::st_set_agr("constant")
+    sf::st_transform(proj_crs)
 
   tr <- tr |>
-    sf::st_set_agr("constant") |>
     sf::st_join(jn, largest = TRUE) |>
-    suppressWarnings() |>
+    suppressWarnings() |> # agr = "constant" doesn't help with st_join
     dplyr::group_by(.data$polygon_number) |>
     dplyr::mutate(transect_number = dplyr::row_number()) |>
     dplyr::ungroup() |>
     dplyr::mutate(
       length = sf::st_length(tr),
       transect_length_km = units::set_units(length, "km"),
-      transect_length_mi = units::set_units(length, "mi")
+      transect_length_mi = units::set_units(length, "mi"),
+      length = NULL
     ) |>
-    dplyr::select(-length)
+    sf::st_set_geometry(geom_col_name) |>
+    dplyr::relocate(
+      dplyr::all_of(geom_col_name),
+      .after = dplyr::last_col()
+    ) |>
+    sf::st_transform(out_crs)
 
   # return transects with spacing in attributes
   attr(tr, "spacing_km") <- opt_sp$spacing / 1000
 
   tr
+
+}
+
+#' get_transect_angle
+#'
+#' @description Calculate bearing of existing transects
+#'
+#' @param transects \code{sf} object with the transect lines
+#' @param avg logical determining if a single average bearing is returned
+#' @param north_up logical determining if all lines are conidered to run
+#'   from their southerly endpoint to their northerly endpoint, i.e. all
+#'   calculated bearings will be betweeen 270 and 90 degrees
+#' @param digits Integer defining the number of decimal digits to which
+#'   calculated bearings are rounded
+#'
+#' @return If \code{avg} is \code{TRUE} the average bearing across all
+#'   lines is returned, otherwise a numeric vector is returned containing the
+#'   bearing for each feature
+#'
+#' @export
+#'
+#' @examples
+#'
+#' # Create transects
+#' tr <- sf::st_as_sf(tibble::tibble(
+#'   name = c("11_1", "11_2", "11_3", "11_4", "11_5"),
+#'   description = c(
+#'     "Meadowdale_RawhideButte_1; 9.25 km; 5.75 mi;",
+#'     "Meadowdale_RawhideButte_2; 15.71 km; 9.76 mi;",
+#'     "Meadowdale_RawhideButte_3; 20.00 km; 12.43 mi;",
+#'     "Meadowdale_RawhideButte_4; 19.59 km; 12.17 mi;",
+#'     "Meadowdale_RawhideButte_5; 32.58 km; 20.24 mi;"
+#'   ),
+#'   geometry = sf::st_as_sfc(c(
+#'     "LINESTRING(-105.0879 42.7024, -105.0912 42.6192)",
+#'     "LINESTRING(-105.037 42.7342, -105.0426 42.5928)",
+#'     "LINESTRING(-104.9864 42.7538, -104.9937 42.5737)",
+#'     "LINESTRING(-104.9363 42.7617, -104.9436 42.5853)",
+#'     "LINESTRING(-104.8866 42.7597, -104.899 42.4663)"
+#'   ), crs = 4326)
+#' ))
+#'
+#' # Calculate average bearing
+#' avg_tr_angle <- get_transect_angle(tr)
+#'
+#' # Calculate bearing for each feature
+#' tr_angles <- get_transect_angle(tr, avg = FALSE)
+#'
+get_transect_angle <- function(transects,
+                               avg = TRUE,
+                               north_up = TRUE,
+                               digits = 0) {
+
+  # get endpoint coordinates
+  out <- transects |>
+    sf::st_transform(32159) |>
+    sf::st_set_agr("constant") |>
+    sf::st_cast("POINT") |>
+    sf::st_geometry() |>
+    sf::st_coordinates()
+
+  # calculate deltas
+  out <- out[seq(2, nrow(out), 2), ] -
+    out[seq(1, nrow(out), 2), ]
+
+  # force delta Y to be positive if north_up is TRUE
+  if (north_up) {
+    idx <- out[, 2] < 0
+    out[idx, 1:2] <- out[idx, 1:2] * -1
+  }
+
+  out <- cbind(
+    out,
+    ThetaRadians = atan2(out[, 2], out[, 1]),
+    ThetaDegrees = atan2(out[, 2], out[, 1]) * 180 / pi,
+    Bearing = (90 - atan2(out[, 2], out[, 1]) * 180 / pi) %% 360
+  )
+
+  idx <- out[, 5] < 0
+  out[idx, 5] <- out[idx, 5] + 360
+
+  if (avg) {
+    mean_sin <- mean(sin(out[, 3]))
+    mean_cos <- mean(cos(out[, 3]))
+    out <- round((90 - atan2(mean_sin, mean_cos) * 180 / pi) %% 360, digits)
+    out <- ifelse(out == 360, 0, out)
+  } else {
+    out[, 5] <- round(out[, 5], digits)
+    idx <- out[, 5] == 360
+    out[idx, 5] <- 0
+    out <- as.numeric(out[, 5])
+  }
+
+  out
+
+}
+
+#' get_transect_spacing
+#'
+#' @description Attempt to reverse engineer the spacing used to generate a set
+#'   of transects
+#'
+#' @param transects \code{sf} object with the transect lines
+#'
+#' @return A numeric scalar representing the estimated transect spacing in
+#'   meters
+#'
+#' @export
+#'
+#' @examples
+#'
+#' # Create transects
+#' tr <- sf::st_as_sf(tibble::tibble(
+#'   name = c("11_1", "11_2", "11_3", "11_4", "11_5"),
+#'   description = c(
+#'     "Meadowdale_RawhideButte_1; 9.25 km; 5.75 mi;",
+#'     "Meadowdale_RawhideButte_2; 15.71 km; 9.76 mi;",
+#'     "Meadowdale_RawhideButte_3; 20.00 km; 12.43 mi;",
+#'     "Meadowdale_RawhideButte_4; 19.59 km; 12.17 mi;",
+#'     "Meadowdale_RawhideButte_5; 32.58 km; 20.24 mi;"
+#'   ),
+#'   geometry = sf::st_as_sfc(c(
+#'     "LINESTRING(-105.0879 42.7024, -105.0912 42.6192)",
+#'     "LINESTRING(-105.037 42.7342, -105.0426 42.5928)",
+#'     "LINESTRING(-104.9864 42.7538, -104.9937 42.5737)",
+#'     "LINESTRING(-104.9363 42.7617, -104.9436 42.5853)",
+#'     "LINESTRING(-104.8866 42.7597, -104.899 42.4663)"
+#'   ), crs = 4326)
+#' ))
+#'
+#' # Estimate spacing
+#' tr_spacing <- get_transect_spacing(tr)
+#'
+get_transect_spacing <- function(transects) {
+
+  # convert to wylam
+  x <- sf::st_transform(transects, 32159)
+
+  # get transect angle and rotate to N-S orientation
+  tr_angle <- get_transect_angle(x)
+  ctr <- sf::st_centroid(sf::st_union(x))
+  x <- rotate_geometry(x, tr_angle * -1, ctr = ctr)
+
+  # get endpoint coordinates
+  xy <- x |>
+    sf::st_set_agr("constant") |>
+    sf::st_cast("POINT") |>
+    sf::st_geometry() |>
+    sf::st_coordinates() |>
+    tibble::as_tibble()
+
+  # cluster by x coordinate and find nearest non-clustered x
+  xy <- xy |>
+    dplyr::group_by(
+      xclust = stats::cutree(
+        stats::hclust(stats::dist(.data$X)),
+        h = 100
+      )
+    ) |>
+    dplyr::summarize(
+      X = mean(.data$X),
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      nearest_dist = apply(
+        stats::dist(.data$X),
+        1,
+        \(row) min(row[row > 0], na.rm = TRUE)
+      )
+    )
+
+  # cluster again by nearest and take the average of the biggest cluster
+  xy |>
+    dplyr::group_by(
+      distclust = stats::cutree(
+        stats::hclust(stats::dist(.data$nearest_dist)),
+        h = 100
+      )
+    ) |>
+    dplyr::summarize(
+      spacing = mean(.data$nearest_dist),
+      freq = dplyr::n(),
+      .groups = "drop"
+    ) |>
+    dplyr::slice_max(.data$freq) |>
+    dplyr::pull(.data$spacing)
 
 }

@@ -4,12 +4,15 @@
 \alias{create_transects}
 \title{create_transects}
 \usage{
-create_transects(opt_spacing)
+create_transects(opt_spacing, proj_crs = 32159)
 }
 \arguments{
 \item{opt_spacing}{A list produced by \code{optimal_transect_spacing}
 containing the spacing in meters and the arguments used to call the
 function}
+
+\item{proj_crs}{Coordinate reference system used for enforcing valid
+geometries. Must be a projected coordinate system such as WYLAM.}
 }
 \value{
 Returns an \code{sf} object with features of type \code{LINESTRING}
