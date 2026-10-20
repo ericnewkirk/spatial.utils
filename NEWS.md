@@ -3,7 +3,7 @@
 * Adds default for argument `sf_data` in `zoom_to_data()` to improve pipe 
   compatibility
   
-  # spatial.utils version 0.1.04
+# spatial.utils version 0.1.04
 
 * Refactor transect-generating functions to accommodate all options provided in 
   the current PronghornLT shiny app (breaking on hunt areas, different buffers 
