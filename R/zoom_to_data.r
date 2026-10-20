@@ -24,7 +24,7 @@
 #'
 #' }
 #'
-zoom_to_data <- function(lf, sf_data, max_zoom = 18) {
+zoom_to_data <- function(lf, sf_data = leaflet::getMapData(lf), max_zoom = 18) {
 
   bbox <- sf_data |>
     sf::st_transform(4326) |>

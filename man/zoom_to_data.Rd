@@ -4,7 +4,7 @@
 \alias{zoom_to_data}
 \title{Zoom to Data Extent}
 \usage{
-zoom_to_data(lf, sf_data, max_zoom = 18)
+zoom_to_data(lf, sf_data = leaflet::getMapData(lf), max_zoom = 18)
 }
 \arguments{
 \item{lf}{\code{leaflet} or \code{leafletProxy} object}
