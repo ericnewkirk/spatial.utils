@@ -9,6 +9,8 @@
   the current PronghornLT shiny app (breaking on hunt areas, different buffers 
   for internal breaks versus outer boundary) and improve consistency of 
   coordinate reference system handling
+* `lfdraw_to_sf()`: process the json returned by the leaflet draw plugin to 
+  return an `sf` object
 
 # spatial.utils version 0.1.03
 
