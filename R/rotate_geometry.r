@@ -52,7 +52,8 @@ rotate_geometry <- function(sf, deg, ctr = NULL, byrow = FALSE) {
   g <- (g - ctr) * rmat + ctr
 
   out |>
-    sf::st_set_geometry(g)
+    sf::st_set_geometry(g) |>
+    sf::st_set_crs(sf::st_crs(sf))
 
 }
 
